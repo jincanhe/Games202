@@ -124,7 +124,7 @@ float PCSS(sampler2D shadowMap, vec4 coords){
 
   // STEP 3: filtering
   
-  return 1.0;
+  return dBlock;
 
 }
 
