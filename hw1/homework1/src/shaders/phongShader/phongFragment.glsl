@@ -84,25 +84,27 @@ void uniformDiskSamples( const in vec2 randomSeed ) {
 }
 
 float findBlocker( sampler2D shadowMap,  vec2 uv, float zReceiver ) {
-  poissonDiskSamples(uv.xy);
+    poissonDiskSamples(uv.xy);
 
-  float shadowMapSize = 400.0;
-  float range = 1.0 / shadowMapSize;
-  int num = 0;
-  for(int i = 0; i < NUM_SAMPLES; i++)
-  {
-    vec2 curUv = poissonDisk[i] * range * 50.0 + uv;
-    vec4 depthpack = texture2D(shadowMap,curUv);
-    float depthUnpack =unpack(depthpack);
-
-    if(depthUnpack < zReceiver)
+    float shadowMapSize = 400.0;
+    float range = 1.0 / shadowMapSize * 20.0;
+    int num = 0;
+    float blockerDepths = 0.0;
+    for(int i = 0; i < NUM_SAMPLES; i++)
     {
-      num += 1;
-    }
-  }
+      vec2 curUv = poissonDisk[i] * range + uv;
+      vec4 depthpack = texture2D(shadowMap,curUv);
+      float depthUnpack =unpack(depthpack);
 
-  float res = float(num) / float(NUM_SAMPLES);
-	return res;
+      if(zReceiver > depthUnpack + 0.01)
+      {
+        blockerDepths += depthUnpack;
+        num += 1;
+      }
+    }
+
+    float res = float(blockerDepths) / float(num);
+    return res;
 }
 
 float PCF(sampler2D shadowMap, vec4 coords) {
@@ -114,17 +116,32 @@ float PCSS(sampler2D shadowMap, vec4 coords){
   poissonDiskSamples(coords.xy);
   float zReceiver = coords.z;
 
-  float count = 20.0;
   float shadowMapSize = 400.0;
-  float range = 1.0 / shadowMapSize;
-  float num = 0.0;
+  int noShadowCount = 0;
   // STEP 1: avgblocker depth
   float dBlock = findBlocker(shadowMap, coords.xy, zReceiver);
+  if(dBlock < EPS) return 1.0;
+  if(dBlock > 1.0) return 0.0;
   // STEP 2: penumbra size
-
+  float wlight = 1.2;
+  float penumbar = (zReceiver - dBlock) * wlight / dBlock;
   // STEP 3: filtering
-  
-  return dBlock;
+  float range = 1.0 / shadowMapSize * penumbar * 5.0;
+
+  for(int i = 0; i < NUM_SAMPLES; i++)
+  {
+    vec2 curUv = poissonDisk[i] * range+ coords.xy;
+    vec4 depthpack = texture2D(shadowMap,curUv);
+    float depthUnpack =unpack(depthpack);
+
+    if(zReceiver < depthUnpack + 0.02 )
+    {
+        noShadowCount += 1;
+    }
+  }
+  float res = float(noShadowCount) / float(NUM_SAMPLES);
+
+  return res;
 
 }
 
@@ -137,7 +154,7 @@ float useShadowMap(sampler2D shadowMap, vec4 shadowCoord){
   vec3 normal = normalize(vNormal);
   float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
 
-  if(depthUnpack  < shadowCoord.z - 0.02)
+  if(depthUnpack  < shadowCoord.z - 0.01)
   {
     return 0.0;
   }
